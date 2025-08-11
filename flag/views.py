@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from flag.serializers import FlagSerializer, FlagDependencySerializer, AuditLogSerializer
 from .models import Flag,AuditLog
-
+from .services import auto_disable_dependents_cascade
 
 class FlagListView(APIView):
     def get(self, request):
@@ -20,23 +20,13 @@ class FlagDetailView(APIView):
        return Response(serializer.data,status=status.HTTP_200_OK)
 
 class FlagToggleView(APIView):
-    def auto_disable_dependents_cascade(self, flag):
-        for dep in flag.dependents.all():
-            if dep.flag.is_active:
-                dep.flag.is_active = False
-                dep.flag.save()
-                AuditLog.objects.create(
-                    flag=dep.flag,
-                    action="auto_disable",
-                    reason=f"Dependency {flag.name} was disabled",
-                    actor="system")
-                self.auto_disable_dependents_cascade(dep.flag)
+
 
 
     def post(self,request,pk):
         instance = get_object_or_404(Flag, pk=pk)
         if instance.is_active:
-            self.auto_disable_dependents_cascade(instance)
+            auto_disable_dependents_cascade(instance)
             instance.is_active = False
             instance.save()
             AuditLog.objects.create(flag=instance,action='toggle_off',reason='manual inactive',actor='API')
